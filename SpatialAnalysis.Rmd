@@ -1,0 +1,200 @@
+---
+title: "An introduction for an Spatial Analysis"
+author: "Kenta Okuyama"
+date: "October 8, 2018"
+output: html_document
+---
+
+```{r library}
+library(tidyverse)
+```
+
+
+```{r load data}
+Ethnicity <- read.csv("Camden/tables/KS201EW_oa11.csv") 
+Rooms <- read.csv("Camden/tables/KS403EW_oa11.csv") 
+Qualifications <-read.csv("Camden/tables/KS501EW_oa11.csv") 
+Employment <-read.csv("Camden/tables/KS601EW_oa11.csv")
+names(Ethnicity)
+```
+
+```{r}
+Ethnicity <- Ethnicity[, c(1, 21)]
+Rooms <- Rooms[, c(1, 13)]
+Employment <- Employment[, c(1, 20)] 
+Qualifications <- Qualifications[, c(1, 20)]
+names(Ethnicity)<- c("OA", "White_British") 
+names(Rooms)<- c("OA", "Low_Occupancy") 
+names(Employment)<- c("OA", "Unemployed") 
+names(Qualifications)<- c("OA", "Qualification")
+#1 Merge Ethnicity and Rooms to create a new object called "merged_data_1"
+merged_data_1 <- merge(Ethnicity, Rooms, by="OA")
+#2 Merge the "merged_data_1" object with Employment to create a new merged data object
+merged_data_2 <- merge(merged_data_1, Employment, by="OA")
+#3 Merge the "merged_data_2" object with Qualifications to create a new data object
+Census.Data <- merge(merged_data_2, Qualifications, by="OA")
+```
+
+```{r save data}
+# Writes the data to a csv named "practical_data" in your file directory
+write.csv(Census.Data, "practical_data.csv", row.names=F)
+```
+
+# Practical 2: Data exploration in R
+### Print data frame in several way
+```{r}
+# prints the data within the console
+print(Census.Data)
+ # prints the selected data within the console
+print(Census.Data[1:20,1:5])
+ # to view the top 1000 cases of a data frame
+View(Census.Data)
+# to view the top or bottom n cases of a data frame
+head(Census.Data)
+tail(Census.Data)
+ #List the column headings
+names(Census.Data)
+```
+
+### Descriptive statistics - histogram and boxplot
+```{r}
+# Creates a histogram
+hist(Census.Data$Unemployed)
+# Define smaller breaks to see more detailed distribution
+hist(Census.Data$Unemployed, breaks=20, col= "blue", main="% in full-time employment", xlab="Percentage")
+# Box and whisker plots
+boxplot(Census.Data[,2:5])
+```
+
+### Descriptive statistics - violin plot
+### Violin plot is a combination of histogram and boxplot
+```{r}
+library("vioplot")
+vioplot(Census.Data$Unemployed, Census.Data$Qualification, Census.Data$White_British, Census.Data$Low_Occupancy, ylim=c(0,100),
+col = "dodgerblue", rectCol="dodgerblue3", colMed="dodgerblue4")
+```
+
+# Practical 3: Bivariate Plots in R
+### Using ggplot is the best to visualize data. The code below visualize 4 variables within 2 dementional chart. White_British is proportional to the color, and Low_Occupancy is propotional to the size
+```{r}
+# with ggplot, you can add 4 variables in two dementional chart
+p <- ggplot(Census.Data, aes(Unemployed,Qualification))
+p + geom_point(aes(colour = White_British, size = Low_Occupancy))
+```
+
+# Practical 4: Finding Relationships in R
+## Correlation analysis
+### For continous variables, make a correlation matrix is useful to examine the relationship between each pair of variable. 
+```{r}
+ # creates a data1 object which does not include the 1st column from the original data
+data1 <- Census.Data[,2:5]
+round(cor(data1),2)
+```
+
+### And this correlation can be visualized in heatmap using ggplot
+### This kind of heatmap is useful when there are numerous pair of variablea
+```{r}
+qplot(x=Var1, y=Var2, data=melt(cor(data1, use="p")), fill=value, geom="tile") + scale_fill_gradient2(limits=c(-1, 1))
+```
+
+## Regression analysis
+### After some correlation analysis, we want to draw a regression line on scatter plots. Regresson line is drawn in minimising the distance from every point in the scatterplot to the regression line using a method called least squares estimation. Least square estimation essentially aims to reduce the squared average of all the distances: from observed data point(y) to predicted value(y^: regresion line)
+### R squared refers to how much variance of y is explanined by x. The greater the R squared value, the better model. R squared is computed as follows:
+## R squared = SSR / SST
+### SSR is the "Explained deviation", which is the distance from mean y to the regression line (predicted value)
+### SST is the "Total variance" which is the distance from mean y to the observed point
+### This formula simply represents the proption of SSR to SST. In other words, how much total variance is explained by a regression model
+### Residual is the distance from regression line to the observed point. Again, simple linear regression is trying to minimize this distance (actually attempting to compute the minimal value of sum of squared residials, and draw a line)
+```{r}
+# runs a model with two independent variables
+model_2 <- lm(Census.Data$Qualification~ Census.Data$Unemployed + Census.Data$White_British)
+summary(model_2)
+```
+
+Practical 5: Making maps in R
+```{r library}
+library("rgdal") 
+library("rgeos")
+```
+
+### First import polygon data (shapefile)
+```{r}
+ # Load the output area shapefiles
+Output.Areas<- readOGR("Camden/shapefiles", "Camden_oa11")
+# plots the shapefile
+plot(Output.Areas)
+```
+
+### The shepefile just added does not have any variables. The Census data has unique variable that can be mapped on this polygon shapefile. Merge the data by each key field
+```{r}
+ # joins data to the shapefile
+OA.Census <- merge(Output.Areas, Census.Data, by.x="OA11CD", by.y="OA")
+```
+
+### Now, set the coordinate system
+```{r}
+ # sets the coordinate system to the British National Grid
+proj4string(OA.Census) <- CRS("+init=EPSG:27700")
+```
+
+### Everything gets ready for mapping, now let's map!
+```{r}
+library(tmap) 
+library(leaflet)
+ # this will produce a quick map of our qualification variable
+qtm(OA.Census, fill = "Qualification")
+```
+
+### Above, we simply mapped a qualification by one line of code. It is possible to configure map with more information by adding element by +. It is similar to ggplot and very intuitive.
+### Code below define the data by "tm_shape()", and define the variable to be mapped by "tm_fill()"
+```{r}
+# Creates a simple choropleth map of our qualification variable
+tm_shape(OA.Census) + tm_fill("Qualification")
+```
+
+### If you want to change the color, you can. Just define the color based on R color brewer in the line.
+```{r}
+library(RColorBrewer)
+display.brewer.all()
+tm_shape(OA.Census) + tm_fill("Qualification", palette = "-Greens")
+```
+
+### Besides the color, it is important to define the number of categores and the way to categorize
+### The code below visualize it by 7 quatile categorical range
+```{r}
+tm_shape(OA.Census) + tm_fill("Qualification", style = "quantile", n = 7, palette = "Reds")
+```
+
+
+### Adding a histogram as a legend is helpful to see how the intervals were defined
+```{r}
+# includes a histogram in the legend
+tm_shape(OA.Census) + tm_fill("Qualification", style = "quantile", n = 5, palette = "Reds", legend.hist = TRUE)
+```
+
+### For completing mapping, it is necessary to add north arrow
+### "tm_compass()" does that. "tm_borders()" can be used to change the line of border
+ 
+```{r}
+tm_shape(OA.Census) + tm_fill("Qualification", palette = "Reds") + tm_borders(alpha=.4) +
+tm_compass()
+```
+
+
+### The map is becoming almost complete one. However, it lacks something still. Adding title, configure the size of legend can be done by this code below
+```{r}
+# adds in layout, gets rid of frame
+tm_shape(OA.Census) + tm_fill("Qualification", palette = "Reds",
+style = "quantile", title = "% with a Qualification") +
+tm_borders(alpha=.4) +
+tm_compass() +
+tm_layout(title = "Camden, London", legend.text.size = 1.1,
+legend.title.size = 1.4, legend.position = c("right", "top"), frame = FALSE)
+```
+
+### After completing the map, you can save it as shapefile.
+```{r}
+library(rgdal)
+writeOGR(OA.Census, dsn = "Camden/Output", layer = "Census_OA_Shapefile", driver="ESRI Shapefile")
+```
+
