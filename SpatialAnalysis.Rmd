@@ -69,9 +69,9 @@ boxplot(Census.Data[,2:5])
 ### Descriptive statistics - violin plot
 ### Violin plot is a combination of histogram and boxplot
 ```{r}
-library("vioplot")
-vioplot(Census.Data$Unemployed, Census.Data$Qualification, Census.Data$White_British, Census.Data$Low_Occupancy, ylim=c(0,100),
-col = "dodgerblue", rectCol="dodgerblue3", colMed="dodgerblue4")
+# #library("vioplot")
+# vioplot(Census.Data$Unemployed, Census.Data$Qualification, Census.Data$White_British, Census.Data$Low_Occupancy, ylim=c(0,100),
+# col = "dodgerblue", rectCol="dodgerblue3", colMed="dodgerblue4")
 ```
 
 # Practical 3: Bivariate Plots in R
@@ -94,11 +94,11 @@ round(cor(data1),2)
 ### And this correlation can be visualized in heatmap using ggplot
 ### This kind of heatmap is useful when there are numerous pair of variablea
 ```{r}
-qplot(x=Var1, y=Var2, data=melt(cor(data1, use="p")), fill=value, geom="tile") + scale_fill_gradient2(limits=c(-1, 1))
+# qplot(x=Var1, y=Var2, data=melt(cor(data1, use="p")), fill=value, geom="tile") + scale_fill_gradient2(limits=c(-1, 1))
 ```
 
 ## Regression analysis
-### After some correlation analysis, we want to draw a regression line on scatter plots. Regresson line is drawn in minimising the distance from every point in the scatterplot to the regression line using a method called least squares estimation. Least square estimation essentially aims to reduce the squared average of all the distances: from observed data point(y) to predicted value(y^: regresion line)
+### After some correlation analysis, we want to draw a regression line on scatter plots. Regresson line is drawn in minimising the distance from every point in the scatterplot to the regression line using a method called least square estimation. Least square estimation essentially aims to reduce the squared average of all the distances: from observed data point(y) to predicted value(y^: regresion line)
 ### R squared refers to how much variance of y is explanined by x. The greater the R squared value, the better model. R squared is computed as follows:
 ## R squared = SSR / SST
 ### SSR is the "Explained deviation", which is the distance from mean y to the regression line (predicted value)
@@ -198,3 +198,446 @@ library(rgdal)
 writeOGR(OA.Census, dsn = "Camden/Output", layer = "Census_OA_Shapefile", driver="ESRI Shapefile")
 ```
 
+# Practical 6: Mapping point data in R
+```{r}
+library(rgdal)
+library(rgeos)
+Output.Areas<- readOGR("Camden/shapefiles", "Camden_oa11")
+# join our census data to the shapefile
+OA.Census <- merge(Output.Areas, Census.Data, by.x="OA11CD", by.y="OA")
+# load the house prices csv file
+houses <- read.csv("camdenhousesales15.csv")
+# we only need a few columns for this practical 
+houses <- houses[,c(1,2,8,9)]
+```
+
+### The data is ready. houses data has spatial attributes, but now it is just a simple data frame. By using sp package, create a spatial point data
+```{r}
+library("sp")
+# create a House.Points SpatialPointsDataFrame
+House.Points <-SpatialPointsDataFrame(houses[,3:4], houses,
+proj4string = CRS("+init=EPSG:27700"))
+```
+
+### Spatial point data was created. Before mapping this point data, create a base map.
+```{r}
+library("tmap")
+# This plots a blank base map, we have set the transparency of the borders to 0.4
+tm_shape(OA.Census) + tm_borders(alpha=.4)
+```
+
+### Now map the point data on the base map. Simply adding + tm_shape(House.Points) like ggplot
+```{r}
+# creates a coloured dot map the colour palette and interval style
+tm_shape(OA.Census) + tm_borders(alpha=.4) +
+tm_shape(House.Points) + tm_dots(col = "Price", palette = "Reds", style = "quantile")
+```
+
+### As you can see, col = "Price" refers to the column that you want to visualize, Palette = "Red" defines the color of plots, and style = "quantile" defined the category of the "Price" value shown
+
+### You can see tm_shape() calls GIS data, and after + sign, you can customize the way to be visualized. This code just added a legend titile for point data
+```{r}
+# creates a coloured dot map
+tm_shape(OA.Census) + tm_borders(alpha=.4) +
+tm_shape(House.Points) + tm_dots(col = "Price", scale = 1.5, palette = "Reds", style = "quantile", title = "Price Paid (£)")
+```
+
+
+
+### Ok, now let's add a north arrow and configure the size of legend text
+```{r}
+# creates a coloured dot map
+tm_shape(OA.Census) + tm_borders(alpha=.4) +
+tm_shape(House.Points) + tm_dots(col = "Price", scale = 1.5, palette = "Purples",style = "quantile", title = "Price Paid (£)") + tm_layout(legend.text.size = 1.1, legend.title.size = 1.4, frame = FALSE)
+```
+
+### Now change the way to visualize point data. This creates a proportional symbol map
+```{r}
+# creates a proportional symbol map
+tm_shape(OA.Census) + tm_borders(alpha=.4) + tm_shape(House.Points) + tm_bubbles(size = "Price", col = "Price",
+palette = "Blues", style = "quantile", legend.size.show = FALSE,
+title.col = "Price Paid (£)") +
+tm_layout(legend.text.size = 1.1, legend.title.size = 1.4, frame = FALSE)
+```
+
+### It is always poweful to visualize more than one GIS layer together. This turns on the symbology of poligon data, and you can visualize the association  
+```{r}
+# creates a proportional symbol map
+tm_shape(OA.Census) + tm_fill("Qualification", palette = "Reds",
+style = "quantile", title = "% Qualification") +
+tm_borders(alpha=.4) +
+tm_shape(House.Points) + tm_bubbles(size = "Price", col = "Price",
+palette = "Blues", style = "quantile", legend.size.show = FALSE,
+title.col = "Price Paid (£)", border.col = "black", border.lwd = 0.1, border.alpha = 0.1) +
+tm_layout(legend.text.size = 0.8, legend.title.size = 1.1, frame = FALSE)
+```
+
+### Greate. Now save the data as a shapefile.
+```{r}
+writeOGR(OA.Census, dsn = "Camden/Output", layer = "Camden_house_sale", driver="ESRI Shapefile")
+```
+
+
+# Pracitical 7: Using R as GIS
+### Getting ready the data
+```{r}
+# load the spatial libraries
+library("sp") 
+library("rgdal")
+library("rgeos")
+# Load the output area shapefiles
+Output.Areas <- readOGR("Camden/shapefiles", "Camden_oa11")
+# join our census data to the shapefile
+OA.Census <- merge(Output.Areas, Census.Data, by.x="OA11CD", by.y="OA")
+# load the houses point files
+House.Points <- readOGR("Camden_house_sales", "Camden_house_sales")
+```
+  
+## 1. Aggregate point in polygon
+```{r}
+# point in polygon. Gives the points the attributes of the polygons that they are in
+pip <- over(House.Points, OA.Census)
+View(House.Points)
+# need to bind the census data to our original points
+House.Points@data <- cbind(House.Points@data, pip) 
+View(House.Points@data)
+# it is now possible to plot the house prices and local unemployment rates
+plot(log(House.Points@data$Price), House.Points@data$Unemployed)
+```
+
+
+### In the above, two GIS data were merged by ovrlaying two shapefiles. Attributes of polygon data were applied to point data which are within each polygon. 
+### Now, you want to visualize the aggregated value of house price in each polygon by map. It can be done by aggregating data first, join the newly created aggregated data back to the original polygon data, and visualize that field.
+```{r}
+# first we aggregate the house prices by the OA11CD (OA names) column
+# we ask for the mean for each OA
+OA <- aggregate(House.Points@data$Price, by = list(House.Points@data$OA11CD), mean)
+# change the column names of the aggregated data
+names(OA) <- c("OA11CD", "Price")
+# join the aggregated data back to the OA.Census polygon
+OA.Census@data <- merge(OA.Census@data, OA, by = "OA11CD", all.x = TRUE)
+# visualize the value Price by quantile
+library(tmap)
+tm_shape(OA.Census) + tm_fill(col = "Price", style = "quantile", title = "Mean House Price (£)")
+```
+
+### As you this is retained as one data with multiple variables from diffrent data, it is possible to apply regression
+```{r}
+model <- lm(OA.Census@data$Price ~ OA.Census@data$Unemployed)
+summary(model)
+```
+## Buffering 
+### Buffering is one of the common GIS tool that you use. By buffering a certain distance from points, you can measure some environmental exposure.
+```{r}
+# create 200m buffers for each house point
+house_buffers <- gBuffer(House.Points, width = 200, byid = TRUE)
+# map in tmap
+tm_shape(OA.Census) + tm_borders() + tm_shape(house_buffers) + tm_borders(col = "blue") + tm_shape(House.Points) + tm_dots(col = "red")
+```
+
+### This may not be used that much, but you can union the buffers
+```{r}
+# merges the buffers
+union.buffers <- gUnaryUnion(house_buffers)
+# map in tmap
+tm_shape(OA.Census) + tm_borders() +
+tm_shape(union.buffers) + tm_fill(col = "blue", alpha = .4) + tm_borders(col = "blue") + tm_shape(House.Points) + tm_dots(col = "red")
+```
+
+### Basemap is sometime helpful to visualize the map better. This code below is calling google satellite map
+```{r}
+library(raster) 
+library(dismo)
+
+#save the map
+google.map <- gmap("Camden, London", type = "roadmap", filename = "Camden.gmap")
+```
+
+### It is possible to add shapefile data on the basemap. However, shapfile needs to have a same coordinate system as google map(base map)
+```{r}
+# convert points first 
+CRS.new <- CRS("+proj=longlat +ellps=WGS84 +datum=WGS84")
+reprojected.houses <- spTransform(House.Points, CRS.new)
+```
+
+### Now, the point data can be mapped on the google base map
+```{r}
+# maps the base and reprojected house points in tmap
+tm_shape(google.map) + tm_raster() +
+tm_shape(reprojected.houses) + tm_dots(col = "Price", style = "quantile",
+scale = 2.5, palette = "Reds", title = "House Prices (£)", border.col = "black", border.lwd = 0.1, border.alpha = 0.4) +
+tm_layout(legend.position = c("left", "bottom"), legend.text.size = 1.1, legend.title.size = 1.4, frame = FALSE,
+          legend.bg.color = "white", legend.bg.alpha = 0.5)
+```
+
+
+
+## Interactive map
+### All the tmap code that we have gone through was for "static" map. It is easily done to create an interactive map the user can zoom in and out, and even als turning layer on and off.
+```{r}
+# interactive maps in tmap
+library(leaflet)
+# turns view map on (switch from plot mode to view mode)
+tmap_mode("view")
+```
+
+### After switchin the tmap mode to "view", the maps craeted from now will be interactive maps. 
+```{r}
+tm_shape(House.Points) + tm_dots(title = "House Prices (£)", border.col = "black", border.lwd = 0.1, border.alpha = 0.2, col = "Price",
+                                 style = "quantile", palette = "Reds")
+
+```
+
+### Interactive map can be made for any tipe of tmap function. For example, instead of tm_dots, tm_bubbles can work to visualize data by bubble.
+```{r}
+tm_shape(House.Points) + tm_bubbles(size = "Price", title.size = "House Prices (£)", border.col = "black", border.lwd = 0.1,border.alpha = 0.4, legend.size.show = TRUE)
+```
+
+### Interactive map can be created for polygon also
+```{r}
+tm_shape(OA.Census) + tm_fill("Qualification", palette = "Reds", style = "quantile", title = "% with a Qualification") + tm_borders(alpha=.4)
+```
+### Interactive map can be exported as html file. Or by embeding the code in the website, it is possible to integrate map on web page. See more detail in "leaflet" package 
+
+
+# Practical 8: Representing Density in R
+### This practical goes over "kernel density". Kernel density estimation is the commonly used means of representing densities of spatial dat points. The technique produces a smooth and continuous surface where each pixel represents a density value based on the number of points within a given distance bandwidth.
+
+
+```{r}
+# load the spatial libraries
+library("sp") 
+library("rgdal")
+library("rgeos")
+# Load the output area shapefiles, we won t join it to any data this time
+Output.Areas <- readOGR("Camden/shapefiles", "Camden_oa11")
+readOGR("Camden_house_sales", "Camden_house_sales")
+# load the houses point files
+House.Points <- readOGR("Camden_house_sales", "Camden_house_sales")
+```
+
+### It is easy to determine the frequency of polygon data. When it comes to point data, it is more complicated to measure the density. The easiest way is to aggregate points within polygon, but kernel density is uses a quadrant to calculate the density for each area within a given threshold. 
+```{r}
+# load the spatial libraries
+library(raster) 
+library(adehabitatHR)
+# runs the kernel density estimation,look up the function parameters for more options
+kde.output <- kernelUD(House.Points, h="href", grid = 1000)
+plot(kde.output)
+```
+
+### It is possible to create contour plots, by simply comverting kde.output to raster, and visualize it by tmap
+```{r}
+# converts to raster
+kde <- raster(kde.output)
+# sets projection to British National Grid projection(kde) <- CRS("+init=EPSG:27700")
+library(tmap)
+# maps the raster in tmap, "ud" is the density variable
+tm_shape(kde) + tm_raster("ud")
+```
+
+
+### Since there is a lot of empty space, zooming in by using bounding box
+```{r}
+
+# creates a bounding box based on the extents of the Output.Areas polygon
+bounding_box <- bbox(Output.Areas)
+# maps the raster within the bounding box
+tm_shape(kde, bbox = bounding_box) + tm_raster("ud")
+```
+
+### Finally, it is possible to mask(clip) the raster(kernel density) that you want to visualize, and mapping with the other polygon data 
+```{r}
+# mask the raster by the output area polygon
+masked_kde <- mask(kde, Output.Areas)
+# maps the masked raster, also maps white output area boundaries
+tm_shape(masked_kde, bbox = bounding_box) + tm_raster("ud", style = "quantile", n = 100,legend.show = FALSE,palette = "YlGnBu") + tm_shape(Output.Areas) + tm_borders(alpha=.3, col = "white") +
+tm_layout(frame = FALSE)
+```
+
+### You can see that the raster(kernel density) that are outside of the polygon is not shown.
+
+### You can also define the catchemnt area of kernel density
+```{r}
+# compute homeranges for 75%, 50%, 25% of points,
+# objects are returned as spatial polygon data frames 
+range75 <- getverticeshr(kde.output, percent = 75) 
+range50 <- getverticeshr(kde.output, percent = 50) 
+range25 <- getverticeshr(kde.output, percent = 25)
+```
+### After you created multiple homerange raster, you can overlay those and visualize at once
+```{r}
+# the code below creates a map of several layers using tmap
+tm_shape(Output.Areas) + tm_fill(col = "#f0f0f0") + tm_borders(alpha=.8, col = "white") + tm_shape(House.Points) + tm_dots(col = "blue") +
+tm_shape(range75) + tm_borders(alpha=.7, col = "#fb6a4a", lwd = 2) + tm_fill(alpha=.1, col = "#fb6a4a") +
+tm_shape(range50) + tm_borders(alpha=.7, col = "#de2d26", lwd = 2) +
+tm_fill(alpha=.1, col = "#de2d26") +
+tm_shape(range25) + tm_borders(alpha=.7, col = "#a50f15", lwd = 2) +
+tm_fill(alpha=.1, col = "#a50f15") + tm_layout(frame = TRUE)
+```
+
+### In this example, you plotted the density of house sales in different range. It is also possible to plot two different value of density, such as two animal species
+
+### In the end, save the raster file
+```{r}
+writeRaster(masked_kde, filename = "kernel_density.grd")
+```
+
+Practical 9: Measuring Spatial Autocorrelation in R
+```{r}
+# Load the data. You may need to alter the file directory
+Census.Data <-read.csv("practical_data.csv")
+# load the spatial libraries
+library("sp") 
+library("rgdal") 
+library("rgeos")
+# Load the output area shapefiles
+Output.Areas <- readOGR("Camden/shapefiles", "Camden_oa11")
+# join our census data to the shapefile
+OA.Census <- merge(Output.Areas, Census.Data, by.x="OA11CD", by.y="OA")
+# load the houses point files
+House.Points <- readOGR("Camden_house_sales", "Camden_house_sales")
+```
+
+### We will work on the variable "qualification". First, we visualize the value on map
+```{r}
+library("tmap")
+tm_shape(OA.Census) + tm_fill("Qualification", palette = "Reds", style = "quantile", title = "% with a Qualification") + tm_borders(alpha=.4)
+```
+
+### Spatial autocorrelation measures how distance influences a particular variable. In other words, it quantifies the degree of which objects are similar to nearby objects...Variables are said to have a positive spaital autocorrelation when similar values tend to be nearer together than dissimilar values.
+## "Everything is related to everything else, but near things are more related than distant things" by Waldo Tober
+### For example, usually people with similar characteristics tend to live in a certain neighborhood, becasue of its neighborhood characteristics, such as house price, safety, etc.
+
+```{r}
+# We will be using the spatial autocorrelation functions available from the spdep package.
+library(spdep)
+```
+
+### In oder to work on neighborhood, we need to identify which neighborhood we are working on. This is telling the centroid point of neighborhood based on polygon
+```{r}
+# Calculate neighbours
+neighbours <- poly2nb(OA.Census) 
+neighbours
+```
+
+### We can plot the link between neighborhoods and visualize their spatial distribution
+```{r}
+plot(OA.Census, border =  "lightgrey" )
+plot(neighbours, coordinates(OA.Census), add=TRUE, col= "red" )
+ 
+```
+
+### This will result in fewer links between neighborhoods
+```{r}
+neighbours2 <- poly2nb(OA.Census, queen = FALSE) 
+neighbours2
+```
+
+### By plotting this with previous links, you can see the difference
+```{r}
+plot(OA.Census, border =  "lightgrey" )
+plot(neighbours, coordinates(OA.Census), add=TRUE, col= "red" )
+plot(neighbours2,coordinates(OA.Census), add=TRUE, col= "blue")
+```
+
+### There are two ways to represent spatial autocorrelation: 1. Global 2. Local. Global model will create a single measure for entire data. Local model explore spatial clustering across space.
+
+## Global model
+### Let's run a model on the neighborhood. First, we need to convert the data types of the neighborhood objects.
+```{r}
+listw <- nb2listw(neighbours2)
+listw
+```
+### Not quite sure what is data conversion for. But now, you can run a model: Moran's test. Moran's test will create a autocorrelation score from -1 to 1. The interpretation is similar to correlation coefficient. 
+  1. #### 1 refers to the perfect positive sptatial autocorrelation (so our data is clusterd)
+  2. #### 0 identifies the data is randamly distributed 
+  3. #### -1 represents negative spatial autocorrelation (so disimilar values are next to each other)
+```{r}
+moran.test(OA.Census$Qualification, listw)
+```
+### The Moral I statistic is 0.54, which means there is a positive spatial autocorrelation in the value of qualification within Camden. In other words, the data spatially cluster. You can also see the p-value.
+
+## Local model
+### In the Global model, we first converted the neighborhood data in to listw, by "listw = nb2listw(neighbours2)". In this local model, we specify "style = "W"", which is for how weights are coded. "W" weights are row standardised (sums over all links to n). A moran plot below looks at each of the values plotted against their spatially lagged values. It basically explores the relationship between the data and their neighbours as a scatter plot.
+```{r}
+# creates a moran plot
+moran <- moran.plot(OA.Census$Qualification, listw = nb2listw(neighbours2, style = "W"))
+```
+
+### Now, run a moran's test
+```{r}
+# creates a local moran output
+local <- localmoran(x = OA.Census$Qualification,
+listw = nb2listw(neighbours2, style = "W"))
+local 
+```
+### So many statistics are calculated. Basically, statistics are calculated for all neighborhoods. It is useful to map local moran statistics. First we will map the local moran statistic (Ii). A positive value for Ii indicates that the unit is surrounded by units with similar values.
+```{r}
+# binds results to our polygon shapefile
+moran.map <- cbind(OA.Census, local)
+# maps the results
+tm_shape(moran.map) + tm_fill(col = "Ii", style = "quantile", title = "local moran statistic")
+```
+
+### From this map, you can observe the geographic patterns of spatial autocorrelation in qualification value in Camden. However, you cannot know if clustering is high or low across the region. 
+```{r}
+### to create LISA cluster map ###
+quadrant <- vector(mode="numeric",length=nrow(local))
+# centers the variable of interest around its mean
+m.qualification <- OA.Census$Qualification - mean(OA.Census$Qualification)
+# centers the local Moran s around the mean
+m.local <- local[,1] - mean(local[,1])
+# significance threshold
+signif <- 0.1
+# builds a data quadrant
+quadrant[m.qualification >0 & m.local>0] <- 4
+quadrant[m.qualification <0 & m.local<0] <- 1
+quadrant[m.qualification <0 & m.local>0] <- 2
+quadrant[m.qualification >0 & m.local<0] <- 3
+quadrant[local[,5]>signif] <- 0
+```
+
+```{r}
+# plot in r
+brks <- c(0,1,2,3,4)
+colors <- c("white","blue",rgb(0,0,1,alpha=0.4),rgb(1,0,0,alpha=0.4),"red")
+plot(OA.Census,border="lightgray",col=colors[findInterval(quadrant,brks,all.inside=FALSE)])
+box()
+legend("bottomleft",legend=c("insignificant","low-low","low-high","high-low","high-high"),
+       fill=colors,bty="n")
+```
+### The map above shows a statistically signifiant clustering of "qualification"
+
+## Hot-splot analysis : Getis-Ord
+### Another approach we can take is hot-spot analysis. The Getis-Ord Gi Statistic looks at neighbours within a defined proximity to identify where either high or low values cluster spatially. Here statistically significant hot-spots are recognised as areas of high values where other areas within a neighbourhood range also share high values too.
+
+### Spatial autocorrelation considers units with shared borders. Getis-Ord considers units based on proximity. You define the set of neighborhood blelow.
+```{r}
+# creates centroid and joins neighbours within 0 and x units
+nb <- dnearneigh(coordinates(OA.Census),0,800) # creates listw
+nb_lw <- nb2listw(nb, style = "B" )
+```
+
+### The neighborhoods look like this. Any difference?
+```{r}
+# plot the data and neighbours
+plot(OA.Census, border =  "lightgrey" )
+plot(nb, coordinates(OA.Census), add=TRUE, col =  "red" )
+```
+
+### With a set of neighborhoods established, we can now run the test and bind results to our polygon file.
+```{r}
+# compute Getis-Ord Gi statistic
+local_g <- localG(OA.Census$Qualification, nb_lw) 
+local_g <- cbind(OA.Census, as.matrix(local_g))
+```
+
+### Map the result
+```{r}
+names(local_g)[6] <- "gstat"
+# map the results
+tm_shape(local_g) + tm_fill("gstat", palette = "RdBu", style = "pretty") + tm_borders(alpha=.4)
+```
+
+### The Gi Statistic is represented as a Z-score. Greater value = Greater intensity of clustering. Positve or negative = High or low clustering.  
